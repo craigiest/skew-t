@@ -373,18 +373,18 @@ const pMin = 100;
 
 // Temperature range at 1000 hPa base
 const tMin = -40;
-const tMax = 50;
+const tMax = 40;
 // Skew factor: degrees C shift per decade of pressure
 const SKEW = 45;  // °C tilt per ln-P decade
 
 function logP(p) { return Math.log(p); }
 
 function pToY(p) {
-  // Map pressure to canvas Y (0 at top = pMin, H at bottom = pMax)
+  // pMin (100 hPa) → Y=0 (top), pMax (1050 hPa) → Y=H (bottom)
   const lp = logP(p);
   const lpMin = logP(pMin);
   const lpMax = logP(pMax);
-  return H * (lpMax - lp) / (lpMax - lpMin);
+  return H * (lp - lpMin) / (lpMax - lpMin);
 }
 
 function tToX(T_C, p) {
@@ -398,7 +398,7 @@ function xyToTP(x, y) {
   // Inverse: canvas coords → (T, p)
   const lpMin = logP(pMin);
   const lpMax = logP(pMax);
-  const lp = lpMax - y / H * (lpMax - lpMin);
+  const lp = y / H * (lpMax - lpMin) + lpMin;
   const p  = Math.exp(lp);
   const tRange = tMax - tMin;
   const skewShift = SKEW * (logP(pMax) - lp) / (logP(pMax) - lpMin);
@@ -589,8 +589,8 @@ function drawAxes() {
 ══════════════════════════════════════════════════ */
 function computeParcelPath(data) {
   if (!data || data.length < 3) return [];
-  // Start from surface
-  const sfc = data[data.length - 1]; // highest pressure = surface
+  // Start from surface (data sorted descending pressure, so index 0 = highest p)
+  const sfc = data[0];
   const T_sfc = sfc.T;
   const Td_sfc = sfc.Td;
   const p_sfc = sfc.p;
@@ -624,7 +624,7 @@ function computeParcelPath(data) {
 
 function computeIndices(data, parcelPath) {
   if (!data || data.length < 4) return null;
-  const sfc = data[data.length - 1];
+  const sfc = data[0]; // highest pressure = surface (descending sort)
 
   // LI: parcel T at 500 hPa minus environment T at 500 hPa
   const env500 = interp(data, 500);
