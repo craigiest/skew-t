@@ -447,8 +447,8 @@ function drawBackground() {
   if (showIsotherms) {
     for (let T = -130; T <= 60; T += 10) {
       ctx.strokeStyle = T === 0 ? '#2266bb' : '#f8a040';
-      ctx.lineWidth   = T === 0 ? 1.4 : 0.7;
-      ctx.setLineDash(T === 0 ? [] : [5, 3]);
+      ctx.lineWidth   = 0.7;
+      ctx.setLineDash([5, 3]);
       const x1 = tToX(T, pMax);
       const x2 = tToX(T, pMin);
       const y1 = pToY(pMax);
