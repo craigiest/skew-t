@@ -277,7 +277,7 @@ Example (CSV):
 
   <!-- ── Canvas ── -->
   <div class="canvas-area">
-    <canvas id="skewt" width="680" height="720"></canvas>
+    <canvas id="skewt" width="800" height="720"></canvas>
   </div>
 </div>
 
@@ -363,7 +363,7 @@ function Td_from_w(p, w_gkg) {
 const canvas = document.getElementById('skewt');
 const ctx    = canvas.getContext('2d');
 
-const M = { top: 40, right: 95, bottom: 50, left: 60 };
+const M = { top: 40, right: 110, bottom: 50, left: 60 };
 const W  = canvas.width  - M.left - M.right;
 const H  = canvas.height - M.top  - M.bottom;
 
@@ -595,7 +595,7 @@ function drawAxes() {
       const h = interpAt(sorted, p, 'h');
       if (h === null) return;
       const y = pToY(p);
-      ctx.fillText((h / 1000).toFixed(1) + ' km', W + 5, y + 4);
+      ctx.fillText((h / 1000).toFixed(1) + ' km', W + 52, y + 4);
     });
   }
 
@@ -821,7 +821,7 @@ function drawSounding(data) {
     ctx.translate(M.left, M.top);
     sorted.forEach(d => {
       if (d.wdir === undefined || d.wspd === undefined) return;
-      drawWindBarb(ctx, W + 30, pToY(d.p), d.wdir, d.wspd);
+      drawWindBarb(ctx, W + 14, pToY(d.p), d.wdir, d.wspd);
     });
     ctx.restore();
   }
