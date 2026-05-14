@@ -1167,8 +1167,11 @@ canvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; })
    EXPORT
 ══════════════════════════════════════════════════ */
 function exportPNG() {
+  const name = soundingTitle
+    ? soundingTitle.replace(/\s+/g, '_').replace(/[:/]/g, '-')
+    : 'skewt';
   const link = document.createElement('a');
-  link.download = 'skewt.png';
+  link.download = name + '.png';
   link.href = canvas.toDataURL('image/png');
   link.click();
 }
