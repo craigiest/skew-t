@@ -363,7 +363,7 @@ function Td_from_w(p, w_gkg) {
 const canvas = document.getElementById('skewt');
 const ctx    = canvas.getContext('2d');
 
-const M = { top: 40, right: 60, bottom: 50, left: 60 };
+const M = { top: 40, right: 95, bottom: 50, left: 60 };
 const W  = canvas.width  - M.left - M.right;
 const H  = canvas.height - M.top  - M.bottom;
 
@@ -411,7 +411,8 @@ function xyToTP(x, y) {
 /* ══════════════════════════════════════════════════
    DRAW BACKGROUND
 ══════════════════════════════════════════════════ */
-let soundingData = null;
+let soundingData  = null;
+let soundingTitle = null;
 
 function drawBackground() {
   ctx.save();
@@ -584,6 +585,20 @@ function drawAxes() {
   ctx.textAlign = 'center';
   ctx.fillText('Temperature (°C)', W/2, H + 38);
 
+  // Right-side height labels (km AGL/ASL from sounding)
+  if (soundingData) {
+    const sorted = [...soundingData].sort((a, b) => b.p - a.p);
+    ctx.fillStyle = '#555';
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'left';
+    isobars.forEach(p => {
+      const h = interpAt(sorted, p, 'h');
+      if (h === null) return;
+      const y = pToY(p);
+      ctx.fillText((h / 1000).toFixed(1) + ' km', W + 5, y + 4);
+    });
+  }
+
   ctx.restore();
 }
 
@@ -687,7 +702,6 @@ function computeIndices(data, parcelPath) {
 
 function interp(arr, targetP) {
   if (!arr || arr.length === 0) return null;
-  // Find surrounding levels
   for (let i = 0; i < arr.length - 1; i++) {
     const a = arr[i], b = arr[i+1];
     const pHi = Math.max(a.p, b.p), pLo = Math.min(a.p, b.p);
@@ -698,6 +712,21 @@ function interp(arr, targetP) {
         T: a.T + f * (b.T - a.T),
         Td: (a.Td !== undefined && b.Td !== undefined) ? a.Td + f * (b.Td - a.Td) : undefined
       };
+    }
+  }
+  return null;
+}
+
+// Interpolate a single numeric field at a target pressure level
+function interpAt(arr, targetP, field) {
+  if (!arr || arr.length === 0) return null;
+  for (let i = 0; i < arr.length - 1; i++) {
+    const a = arr[i], b = arr[i+1];
+    if (a[field] === undefined || b[field] === undefined) continue;
+    const pHi = Math.max(a.p, b.p), pLo = Math.min(a.p, b.p);
+    if (targetP <= pHi && targetP >= pLo) {
+      const f = (targetP - a.p) / (b.p - a.p);
+      return a[field] + f * (b[field] - a[field]);
     }
   }
   return null;
@@ -784,15 +813,18 @@ function drawSounding(data) {
   });
   ctx.stroke();
 
-  // ── Wind Barbs ──
+  ctx.restore();  // end clip
+
+  // ── Wind Barbs (drawn outside the clip) ──
   if (document.getElementById('optWindBarbs').checked) {
+    ctx.save();
+    ctx.translate(M.left, M.top);
     sorted.forEach(d => {
       if (d.wdir === undefined || d.wspd === undefined) return;
       drawWindBarb(ctx, W + 30, pToY(d.p), d.wdir, d.wspd);
     });
+    ctx.restore();
   }
-
-  ctx.restore();
 
   // ── Indices ──
   const indices = computeIndices(sorted, parcelPath);
@@ -862,11 +894,11 @@ function drawWindBarb(ctx, x, y, wdir, wspd_kts) {
 /* ══════════════════════════════════════════════════
    TITLE
 ══════════════════════════════════════════════════ */
-function drawTitle(label) {
+function drawTitle() {
   ctx.fillStyle = '#222';
   ctx.font = 'bold 13px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(label || 'Skew-T Log-P Diagram', M.left + W/2, 24);
+  ctx.fillText(soundingTitle || 'Skew-T Log-P Diagram', M.left + W/2, 24);
 }
 
 /* ══════════════════════════════════════════════════
@@ -880,7 +912,7 @@ function redraw() {
 
   drawBackground();
   drawAxes();
-  drawTitle();
+  drawTitle();  // uses soundingTitle global
   if (soundingData) drawSounding(soundingData);
 }
 
@@ -919,47 +951,109 @@ function updateIndices(idx) {
 /* ══════════════════════════════════════════════════
    DATA PARSING
 ══════════════════════════════════════════════════ */
-function parseData(raw) {
-  const lines = raw.trim().split('\n');
+
+// Parse SPC/RAP text format (%TITLE% / %RAW% / %END%)
+// Columns: pressure, height, temp, dewpoint, wdir, wspd  (comma-sep, -9999=missing)
+function parseSPC(lines) {
+  let title = null;
   const data = [];
+  let inRaw = false;
+  let titleNext = false;
 
   for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('#')) continue;
+    const t = line.trim();
+    if (!t) continue;
 
-    // Skip Wyoming header rows (non-numeric first token)
-    const parts = trimmed.split(/[\s,\t]+/);
+    if (t.startsWith('%TITLE%')) { titleNext = true; continue; }
+    if (titleNext) {
+      // e.g. "OUN   260514/0000" — station + YYMMDD/HHMM
+      const m = t.match(/^(\S+)\s+(\d{6})\/(\d{4})/);
+      if (m) {
+        const [, stn, date, time] = m;
+        const yy = date.slice(0,2), mo = date.slice(2,4), dd = date.slice(4,6);
+        const hh = time.slice(0,2), mm = time.slice(2,4);
+        title = `${stn}  20${yy}-${mo}-${dd}  ${hh}:${mm}Z`;
+      } else {
+        title = t;
+      }
+      titleNext = false;
+      continue;
+    }
+    if (t.startsWith('%RAW%'))  { inRaw = true;  continue; }
+    if (t.startsWith('%END%'))  { inRaw = false; continue; }
+    if (!inRaw) continue;
+
+    const parts = t.split(/\s*,\s*/);
+    if (parts.length < 4) continue;
+    const p    = parseFloat(parts[0]);
+    const h    = parseFloat(parts[1]);
+    const T    = parseFloat(parts[2]);
+    const Td   = parseFloat(parts[3]);
+    const wdir = parts.length > 4 ? parseFloat(parts[4]) : NaN;
+    const wspd = parts.length > 5 ? parseFloat(parts[5]) : NaN;
+
+    if (isNaN(p) || p < 1 || p > 1100) continue;
+    if (isNaN(T) || T <= -999) continue;      // missing
+    if (isNaN(Td) || Td <= -999) continue;    // missing
+    if (T < -120 || T > 60) continue;
+
+    const row = { p, T, Td };
+    if (!isNaN(h) && h > -999) row.h = h;
+    if (!isNaN(wdir) && wdir > -999 && !isNaN(wspd) && wspd > -999) {
+      row.wdir = wdir;
+      row.wspd = wspd;
+    }
+    data.push(row);
+  }
+  return { data, title };
+}
+
+function parseData(raw) {
+  const lines = raw.trim().split('\n');
+
+  // Detect SPC/RAP format
+  if (lines.some(l => l.trim().startsWith('%TITLE%') || l.trim().startsWith('%RAW%'))) {
+    const { data, title } = parseSPC(lines);
+    return data.length >= 3 ? { data, title } : null;
+  }
+
+  // Generic: Wyoming (11 cols) or simple CSV/space-delimited (3-5 cols)
+  const data = [];
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t || t.startsWith('//') || t.startsWith('#')) continue;
+    const parts = t.split(/[\s,\t]+/);
     if (parts.length < 3) continue;
     const p = parseFloat(parts[0]);
-    if (isNaN(p) || p < 50 || p > 1100) continue;
+    if (isNaN(p) || p < 1 || p > 1100) continue;
 
-    // Wyoming format has many columns; we take cols 0,2,3 (pres, temp, dwpt)
-    // CSV: pressure, temp, dewpoint [, wdir, wspd]
-    let T, Td, wdir, wspd;
-
+    let T, Td, h, wdir, wspd;
     if (parts.length >= 7) {
-      // Wyoming: pres, hght, temp, dwpt, relh, mixr, drct, sknt, thta, thte, thtv
+      // Wyoming: pres, hght, temp, dwpt, relh, mixr, drct, sknt, ...
+      h    = parseFloat(parts[1]);
       T    = parseFloat(parts[2]);
       Td   = parseFloat(parts[3]);
       wdir = parseFloat(parts[6]);
       wspd = parseFloat(parts[7]);
     } else {
+      // Simple: pressure, temp, dewpoint [, wdir, wspd]
       T    = parseFloat(parts[1]);
       Td   = parseFloat(parts[2]);
-      wdir = parts.length > 3 ? parseFloat(parts[3]) : undefined;
-      wspd = parts.length > 4 ? parseFloat(parts[4]) : undefined;
+      wdir = parts.length > 3 ? parseFloat(parts[3]) : NaN;
+      wspd = parts.length > 4 ? parseFloat(parts[4]) : NaN;
     }
 
     if (isNaN(T) || isNaN(Td)) continue;
-    if (T < -120 || T > 60)  continue;
+    if (T < -120 || T > 60) continue;
     if (Td < -120 || Td > 60) continue;
 
     const row = { p, T, Td };
+    if (!isNaN(h) && h > 0) row.h = h;
     if (!isNaN(wdir) && !isNaN(wspd)) { row.wdir = wdir; row.wspd = wspd; }
     data.push(row);
   }
 
-  return data.length >= 3 ? data : null;
+  return data.length >= 3 ? { data, title: null } : null;
 }
 
 function showError(msg) {
@@ -971,12 +1065,13 @@ function showError(msg) {
 function parsAndDraw() {
   const raw = document.getElementById('dataInput').value;
   showError('');
-  const data = parseData(raw);
-  if (!data) {
-    showError('Could not parse data. Check format: pressure, temp, dewpoint (CSV or Wyoming text).');
+  const result = parseData(raw);
+  if (!result) {
+    showError('Could not parse data. Supported: SPC text (%RAW%), Wyoming, or CSV (pressure, temp, dewpoint).');
     return;
   }
-  soundingData = data;
+  soundingData  = result.data;
+  soundingTitle = result.title;
   redraw();
 }
 
@@ -1023,6 +1118,7 @@ function loadSample() {
 100  -65.0 -80.0  290   50
 `;
   document.getElementById('dataInput').value = sample.trim();
+  soundingTitle = 'Sample Sounding (OKC-like)';
   parsAndDraw();
 }
 
