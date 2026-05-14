@@ -181,7 +181,7 @@
     }
 
     canvas {
-      background: #0a0a14;
+      background: #ffffff;
       border: 1px solid #0f3460;
       border-radius: 4px;
       box-shadow: 0 4px 32px #00000066;
@@ -371,11 +371,11 @@ const H  = canvas.height - M.top  - M.bottom;
 const pMax = 1050;
 const pMin = 100;
 
-// Temperature range at 1000 hPa base
+// Temperature range at 1000 hPa base (labels at bottom span exactly tMin→tMax)
 const tMin = -40;
-const tMax = 40;
-// Skew factor: degrees C shift per decade of pressure
-const SKEW = 45;  // °C tilt per ln-P decade
+const tMax = 50;
+// How many °C the isotherms shift from bottom (pMax) to top (pMin)
+const SKEW = 65;
 
 function logP(p) { return Math.log(p); }
 
@@ -388,10 +388,11 @@ function pToY(p) {
 }
 
 function tToX(T_C, p) {
-  // Skew-T: x shifts right as pressure decreases
+  // Skew: isotherms shift SKEW °C to the right from pMax (bottom) to pMin (top).
+  // At pMax the labels map exactly to [0, W]; beyond tMax/tMin clips off-screen.
   const tRange = tMax - tMin;
-  const skewShift = SKEW * (logP(pMax) - logP(p)) / (logP(pMax) - logP(pMin));
-  return W * (T_C - tMin + skewShift) / (tRange + SKEW);
+  const frac = (logP(pMax) - logP(p)) / (logP(pMax) - logP(pMin));
+  return W * (T_C - tMin + frac * SKEW) / tRange;
 }
 
 function xyToTP(x, y) {
@@ -401,8 +402,9 @@ function xyToTP(x, y) {
   const lp = y / H * (lpMax - lpMin) + lpMin;
   const p  = Math.exp(lp);
   const tRange = tMax - tMin;
-  const skewShift = SKEW * (logP(pMax) - lp) / (logP(pMax) - lpMin);
-  const T = x / W * (tRange + SKEW) + tMin - skewShift;
+  const frac = (logP(pMax) - lp) / (logP(pMax) - lpMin);
+  const skewShift = frac * SKEW;
+  const T = x / W * tRange + tMin - skewShift;
   return { T, p };
 }
 
@@ -429,7 +431,7 @@ function drawBackground() {
   // ── Isobars ──
   if (showIsobars) {
     const isobars = [1000,925,850,700,600,500,400,300,250,200,150,100];
-    ctx.strokeStyle = '#1e3a5a';
+    ctx.strokeStyle = '#bbb';
     ctx.lineWidth = 0.8;
     isobars.forEach(p => {
       const y = pToY(p);
@@ -440,12 +442,12 @@ function drawBackground() {
     });
   }
 
-  // ── Isotherms (skewed vertical lines) ──
+  // ── Isotherms (skewed lines) ──
   if (showIsotherms) {
-    ctx.lineWidth = 0.7;
-    for (let T = -100; T <= 60; T += 10) {
-      ctx.strokeStyle = T === 0 ? '#2a5a8a' : '#1a3050';
-      ctx.lineWidth   = T === 0 ? 1.2 : 0.7;
+    for (let T = -130; T <= 60; T += 10) {
+      ctx.strokeStyle = T === 0 ? '#2266bb' : '#f8a040';
+      ctx.lineWidth   = T === 0 ? 1.4 : 0.7;
+      ctx.setLineDash(T === 0 ? [] : [5, 3]);
       const x1 = tToX(T, pMax);
       const x2 = tToX(T, pMin);
       const y1 = pToY(pMax);
@@ -454,13 +456,15 @@ function drawBackground() {
       ctx.moveTo(x1, y1);
       ctx.lineTo(x2, y2);
       ctx.stroke();
+      ctx.setLineDash([]);
     }
   }
 
   // ── Dry Adiabats ──
   if (showDryAdiabats) {
-    ctx.strokeStyle = '#2a5a3a';
-    ctx.lineWidth = 0.8;
+    ctx.strokeStyle = '#c06020';
+    ctx.lineWidth = 0.7;
+    ctx.setLineDash([5, 3]);
     for (let theta = -30; theta <= 200; theta += 10) {
       ctx.beginPath();
       let first = true;
@@ -473,13 +477,14 @@ function drawBackground() {
       }
       ctx.stroke();
     }
+    ctx.setLineDash([]);
   }
 
   // ── Moist Adiabats ──
   if (showMoistAdiabats) {
-    ctx.strokeStyle = '#3a6a5a';
-    ctx.lineWidth = 0.8;
-    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = '#208050';
+    ctx.lineWidth = 0.7;
+    ctx.setLineDash([4, 4]);
     const maTemps = [-20,-10,0,5,10,15,20,25,30,35,40];
     maTemps.forEach(T0c => {
       ctx.beginPath();
@@ -499,9 +504,9 @@ function drawBackground() {
 
   // ── Mixing Ratio Lines ──
   if (showMixingRatios) {
-    ctx.strokeStyle = '#5a6a2a';
+    ctx.strokeStyle = '#40a040';
     ctx.lineWidth = 0.6;
-    ctx.setLineDash([2, 4]);
+    ctx.setLineDash([2, 5]);
     const wLines = [0.5,1,2,3,4,6,8,10,14,18,24];
     wLines.forEach(w => {
       ctx.beginPath();
@@ -529,20 +534,19 @@ function drawAxes() {
   ctx.translate(M.left, M.top);
 
   // Border
-  ctx.strokeStyle = '#3a6a8a';
+  ctx.strokeStyle = '#555';
   ctx.lineWidth = 1.5;
   ctx.strokeRect(0, 0, W, H);
 
   // Pressure labels (left axis)
   const isobars = [1000,925,850,700,600,500,400,300,250,200,150,100];
-  ctx.fillStyle = '#9ab';
+  ctx.fillStyle = '#333';
   ctx.font = '11px monospace';
   ctx.textAlign = 'right';
   isobars.forEach(p => {
     const y = pToY(p);
     ctx.fillText(p, -6, y + 4);
-    // tick
-    ctx.strokeStyle = '#3a6a8a';
+    ctx.strokeStyle = '#555';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(0, y);
@@ -550,15 +554,14 @@ function drawAxes() {
     ctx.stroke();
   });
 
-  // Temperature labels (bottom axis, skewed)
+  // Temperature labels (bottom axis) at pMax where skew = 0, so labels are straight
   ctx.textAlign = 'center';
-  for (let T = -40; T <= 50; T += 10) {
+  for (let T = tMin; T <= tMax; T += 10) {
     const x = tToX(T, pMax);
     const y = H;
-    ctx.fillStyle = T < 0 ? '#6aafdf' : '#e96060';
+    ctx.fillStyle = T < 0 ? '#2266bb' : '#cc3300';
     ctx.fillText(T + '°', x, y + 16);
-    // tick
-    ctx.strokeStyle = '#3a6a8a';
+    ctx.strokeStyle = '#555';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(x, y);
@@ -570,13 +573,13 @@ function drawAxes() {
   ctx.save();
   ctx.translate(-42, H/2);
   ctx.rotate(-Math.PI/2);
-  ctx.fillStyle = '#7ab';
+  ctx.fillStyle = '#444';
   ctx.font = '12px sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('Pressure (hPa)', 0, 0);
   ctx.restore();
 
-  ctx.fillStyle = '#7ab';
+  ctx.fillStyle = '#444';
   ctx.font = '12px sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('Temperature (°C)', W/2, H + 38);
@@ -713,52 +716,40 @@ function drawSounding(data) {
   // ── CAPE/CIN Shading ──
   const parcelPath = computeParcelPath(sorted);
   if (document.getElementById('optCAPE').checked && parcelPath.length > 2) {
-    // CAPE (red, parcel warmer than env)
-    ctx.save();
-    for (const sign of [1, -1]) {
-      ctx.beginPath();
-      let started = false;
-      // Forward pass along parcel
-      for (let i = 0; i < parcelPath.length; i++) {
-        const pp = parcelPath[i];
-        const ep = interp(sorted, pp.p);
-        if (!ep) continue;
-        const buoy = pp.T - ep.T;
-        if ((sign === 1 && buoy > 0) || (sign === -1 && buoy < 0)) {
-          const x = tToX(pp.T, pp.p);
-          const y = pToY(pp.p);
-          if (!started) { ctx.moveTo(x, y); started = true; }
-          else ctx.lineTo(x, y);
-        } else if (started) {
-          // Close with environment path backwards
-          break;
-        }
+    // Build array of {xP, xE, y, buoy} at each parcel level
+    const segs = parcelPath.map(pp => {
+      const ep = interp(sorted, pp.p);
+      if (!ep) return null;
+      return { xP: tToX(pp.T, pp.p), xE: tToX(ep.T, pp.p), y: pToY(pp.p), buoy: pp.T - ep.T };
+    }).filter(Boolean);
+
+    // Draw a filled region between parcel and environment curves for a given buoyancy sign
+    function shadeBuoyancy(sign, color) {
+      let run = [];
+      function flush() {
+        if (run.length < 2) { run = []; return; }
+        ctx.beginPath();
+        run.forEach((s, i) => i === 0 ? ctx.moveTo(s.xP, s.y) : ctx.lineTo(s.xP, s.y));
+        for (let i = run.length - 1; i >= 0; i--) ctx.lineTo(run[i].xE, run[i].y);
+        ctx.closePath();
+        ctx.fillStyle = color;
+        ctx.fill();
+        run = [];
       }
-      // Build env segment for closure
-      const xs = [], ys = [];
-      for (let i = parcelPath.length - 1; i >= 0; i--) {
-        const pp = parcelPath[i];
-        const ep = interp(sorted, pp.p);
-        if (!ep) continue;
-        const buoy = pp.T - ep.T;
-        if ((sign === 1 && buoy > 0) || (sign === -1 && buoy < 0)) {
-          xs.push(tToX(ep.T, pp.p));
-          ys.push(pToY(pp.p));
-        }
+      for (const s of segs) {
+        if (sign === 1 ? s.buoy >= 0 : s.buoy <= 0) run.push(s);
+        else flush();
       }
-      xs.forEach((x, i) => ctx.lineTo(x, ys[i]));
-      ctx.closePath();
-      ctx.fillStyle = sign === 1 ? 'rgba(220,80,60,0.20)' : 'rgba(60,80,220,0.20)';
-      ctx.fill();
-      ctx.restore();
-      ctx.save();
+      flush();
     }
-    ctx.restore();
+
+    shadeBuoyancy( 1, 'rgba(220,60,40,0.25)');  // CAPE – red
+    shadeBuoyancy(-1, 'rgba(40,80,220,0.25)');  // CIN  – blue
   }
 
   // ── Parcel Path ──
   if (document.getElementById('optParcel').checked && parcelPath.length > 2) {
-    ctx.strokeStyle = '#f7c948';
+    ctx.strokeStyle = '#8800cc';
     ctx.lineWidth = 1.8;
     ctx.setLineDash([6, 3]);
     ctx.beginPath();
@@ -772,8 +763,8 @@ function drawSounding(data) {
   }
 
   // ── Temperature ──
-  ctx.strokeStyle = '#e94560';
-  ctx.lineWidth = 2.2;
+  ctx.strokeStyle = '#cc2020';
+  ctx.lineWidth = 2.5;
   ctx.beginPath();
   sorted.forEach((d, i) => {
     const x = tToX(d.T, d.p);
@@ -783,8 +774,8 @@ function drawSounding(data) {
   ctx.stroke();
 
   // ── Dewpoint ──
-  ctx.strokeStyle = '#4caf8a';
-  ctx.lineWidth = 2.2;
+  ctx.strokeStyle = '#1a7a1a';
+  ctx.lineWidth = 2.5;
   ctx.beginPath();
   sorted.forEach((d, i) => {
     const x = tToX(d.Td, d.p);
@@ -816,7 +807,7 @@ function drawWindBarb(ctx, x, y, wdir, wspd_kts) {
   ctx.translate(x, y);
   ctx.rotate((wdir - 90) * Math.PI / 180);
 
-  ctx.strokeStyle = '#cde';
+  ctx.strokeStyle = '#333';
   ctx.lineWidth = 1.2;
 
   const staffLen = 24;
@@ -835,7 +826,7 @@ function drawWindBarb(ctx, x, y, wdir, wspd_kts) {
     ctx.lineTo(pos - 6, -8);
     ctx.lineTo(pos - 12, 0);
     ctx.closePath();
-    ctx.fillStyle = '#cde';
+    ctx.fillStyle = '#333';
     ctx.fill();
     pos -= 12;
     spd -= 50;
@@ -861,7 +852,7 @@ function drawWindBarb(ctx, x, y, wdir, wspd_kts) {
   if (wspd_kts < 2.5) {
     ctx.beginPath();
     ctx.arc(0, 0, 4, 0, 2 * Math.PI);
-    ctx.strokeStyle = '#cde';
+    ctx.strokeStyle = '#333';
     ctx.stroke();
   }
 
@@ -872,7 +863,7 @@ function drawWindBarb(ctx, x, y, wdir, wspd_kts) {
    TITLE
 ══════════════════════════════════════════════════ */
 function drawTitle(label) {
-  ctx.fillStyle = '#9ab';
+  ctx.fillStyle = '#222';
   ctx.font = 'bold 13px sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText(label || 'Skew-T Log-P Diagram', M.left + W/2, 24);
@@ -883,8 +874,8 @@ function drawTitle(label) {
 ══════════════════════════════════════════════════ */
 function redraw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  // Dark background
-  ctx.fillStyle = '#0a0a14';
+  // White background
+  ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   drawBackground();
