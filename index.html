@@ -521,10 +521,10 @@ function drawBackground() {
       }
       ctx.stroke();
 
-      // Label at the top of the line (600 hPa)
-      const labelTd = Td_from_w(600, w);
-      const lx = tToX(labelTd, 600);
-      const ly = pToY(600);
+      // Label just above the bottom of the line (pMax)
+      const labelTd = Td_from_w(pMax, w);
+      const lx = tToX(labelTd, pMax);
+      const ly = pToY(pMax);
       ctx.setLineDash([]);
       ctx.fillStyle = '#2a7a2a';
       ctx.font = '9px sans-serif';
