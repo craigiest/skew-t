@@ -117,6 +117,20 @@
     .btn-row { display: flex; gap: 8px; }
     .btn-row button { flex: 1; }
 
+    .url-row { display: flex; gap: 6px; }
+    .url-row input[type="text"] {
+      flex: 1;
+      background: #0d1b2a;
+      border: 1px solid #0f3460;
+      color: #cde;
+      font-size: 0.72rem;
+      padding: 6px 8px;
+      border-radius: 4px;
+      min-width: 0;
+    }
+    .url-row input[type="text"]:focus { outline: none; border-color: #e94560; }
+    .url-row button { white-space: nowrap; }
+
     input[type="file"] { display: none; }
 
     .options-grid {
@@ -246,6 +260,11 @@ Example (CSV):
       <button class="btn-secondary" onclick="document.getElementById('fileInput').click()">Load File</button>
     </div>
     <input type="file" id="fileInput" accept=".txt,.csv" onchange="loadFile(event)" />
+
+    <div class="url-row">
+      <input type="text" id="urlInput" placeholder="https://… sounding data URL" spellcheck="false" />
+      <button class="btn-secondary" onclick="fetchFromURL()">Fetch</button>
+    </div>
 
     <button class="btn-secondary" onclick="loadSample()">Load Sample Sounding</button>
 
@@ -1100,6 +1119,26 @@ function loadFile(event) {
   };
   reader.readAsText(file);
   event.target.value = '';
+}
+
+async function fetchFromURL() {
+  const url = document.getElementById('urlInput').value.trim();
+  if (!url) return;
+  showError('');
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+    const text = await res.text();
+    document.getElementById('dataInput').value = text;
+    parsAndDraw();
+  } catch (err) {
+    const isCORS = err instanceof TypeError && err.message.toLowerCase().includes('fetch');
+    showError(
+      isCORS
+        ? 'Fetch blocked by CORS — the server does not allow cross-origin requests. Try downloading the file and using Load File instead.'
+        : `Fetch failed: ${err.message}`
+    );
+  }
 }
 
 /* ══════════════════════════════════════════════════
