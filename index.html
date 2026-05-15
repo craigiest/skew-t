@@ -447,8 +447,8 @@ function drawBackground() {
   if (showIsotherms) {
     for (let T = -130; T <= 60; T += 10) {
       ctx.strokeStyle = T === 0 ? '#2266bb' : '#f8a040';
-      ctx.lineWidth   = 0.7;
-      ctx.setLineDash([5, 3]);
+      ctx.lineWidth   = 0.5;
+      ctx.setLineDash([]);
       const x1 = tToX(T, pMax);
       const x2 = tToX(T, pMin);
       const y1 = pToY(pMax);
@@ -520,6 +520,17 @@ function drawBackground() {
         else ctx.lineTo(x, y);
       }
       ctx.stroke();
+
+      // Label at the top of the line (600 hPa)
+      const labelTd = Td_from_w(600, w);
+      const lx = tToX(labelTd, 600);
+      const ly = pToY(600);
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#2a7a2a';
+      ctx.font = '9px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(w % 1 === 0 ? w : w.toFixed(1), lx, ly - 3);
+      ctx.setLineDash([2, 5]);
     });
     ctx.setLineDash([]);
   }
